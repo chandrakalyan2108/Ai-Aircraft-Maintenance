@@ -93,7 +93,7 @@ If any of these policies are missing, the Node Group may fail with
 Update kubeconfig.
 
 ``` bash
-aws eks update-kubeconfig --region us-east-1 --name <EKS_CLUSTER_NAME>
+aws eks update-kubeconfig --region ap-south-2 --name <EKS_CLUSTER_NAME>
 ```
 
 Verify the current context.
@@ -181,7 +181,7 @@ must be available inside the pod.
 Create the Kubernetes Secret.
 
 ``` bash
-kubectl create secret generic aws-credentials --from-literal=AWS_ACCESS_KEY_ID=<AWS_ACCESS_KEY_ID> --from-literal=AWS_SECRET_ACCESS_KEY=<AWS_SECRET_ACCESS_KEY> --from-literal=AWS_REGION=us-east-1
+kubectl create secret generic aws-credentials --from-literal=AWS_ACCESS_KEY_ID=<AWS_ACCESS_KEY_ID> --from-literal=AWS_SECRET_ACCESS_KEY=<AWS_SECRET_ACCESS_KEY> --from-literal=AWS_REGION=ap-south-2
 ```
 
 Verify.

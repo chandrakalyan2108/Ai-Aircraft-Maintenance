@@ -135,7 +135,7 @@ Create the following repository secrets.
 |-------------|-------------|
 | AWS_ACCESS_KEY_ID | AWS Access Key |
 | AWS_SECRET_ACCESS_KEY | AWS Secret Key |
-| AWS_REGION | us-east-1 |
+| AWS_REGION | ap-south-2 |
 | AWS_ACCOUNT_ID | AWS Account ID |
 | EKS_CLUSTER_NAME | Amazon EKS Cluster Name |
 | BACKEND_IMAGE | Backend ECR Image URI |
@@ -146,13 +146,13 @@ Example
 ```
 BACKEND_IMAGE
 
-494810891651.dkr.ecr.us-east-1.amazonaws.com/maintenance-backend:latest
+494810891651.dkr.ecr.ap-south-2.amazonaws.com/maintenance-backend:latest
 ```
 
 ```
 FRONTEND_IMAGE
 
-494810891651.dkr.ecr.us-east-1.amazonaws.com/maintenance-frontend:latest
+494810891651.dkr.ecr.ap-south-2.amazonaws.com/maintenance-frontend:latest
 ```
 
 ---

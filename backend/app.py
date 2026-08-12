@@ -18,23 +18,31 @@ app.add_middleware(
 
 client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
+@app.get("/")
+async def root():
+    return {"status": "alive"}
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
+
+@app.get("/testing/health")
+async def health_check():
+    return {"status": "healthy", "message": "Backend is up and running!"}
+
 @app.post("/aircraft/analytics")
 async def get_aircraft_analytics(file: UploadFile = File(...)):
     try:
         file_bytes = await file.read()
         filename = file.filename.lower()
         
-        # 1. Handle Excel Sheets (.xlsx, .xls)
         if filename.endswith(('.xlsx', '.xls')):
             df = pd.read_excel(io.BytesIO(file_bytes))
             text_data = df.to_string(index=False)
-            
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
                 contents=f"Analyze this aircraft maintenance data from Excel:\n{text_data}"
             )
-            
-        # 2. Handle PDF Files (.pdf) using Gemini's native document support
         elif filename.endswith('.pdf'):
             response = client.models.generate_content(
                 model="gemini-2.5-flash",
