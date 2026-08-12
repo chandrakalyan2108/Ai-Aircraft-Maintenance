@@ -2,21 +2,26 @@
 Amazon Bedrock maintenance analyzer for the Aircraft Maintenance Platform.
 
 This module sends deterministic engineering analytics plus the full internal
-maintenance manual PDF to Amazon Bedrock Nova Pro using the Converse API.
-The model is asked to return a structured maintenance report as JSON only.
+maintenance manual PDF to an LLM to return a structured maintenance report.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Protocol
+import urllib.request
+import urllib.error
 
 from botocore.exceptions import BotoCoreError, ClientError
 
 
 logger = logging.getLogger(__name__)
+
+# Set your Gemini API key here or via environment variable GEMINI_API_KEY
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY_HERE")
 
 
 class BedrockRuntimeClient(Protocol):
@@ -28,7 +33,7 @@ class BedrockRuntimeClient(Protocol):
 
 class AircraftMaintenanceAnalyzer:
     """
-    Generate AI maintenance reports using Amazon Bedrock and a manual PDF.
+    Generate AI maintenance reports using AI and a manual PDF.
     """
 
     def __init__(
@@ -38,12 +43,14 @@ class AircraftMaintenanceAnalyzer:
         manual_pdf_path: str | Path,
         temperature: float = 0.2,
         max_tokens: int = 2_000,
+        use_gemini_bypass: bool = True,  # Set to True to bypass AWS Bedrock block
     ) -> None:
         self.bedrock_client = bedrock_client
         self.model_id = model_id
         self.manual_pdf_path = Path(manual_pdf_path)
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.use_gemini_bypass = use_gemini_bypass
 
     def load_manual(self) -> bytes:
         """Load the complete aircraft maintenance manual PDF as bytes."""
@@ -77,16 +84,11 @@ Your task is to generate a professional aircraft maintenance engineering report
 using two inputs:
 
 1. Engineering Analytics JSON provided below.
-2. The attached internal Aircraft Maintenance Manual PDF.
+2. Aircraft maintenance standards and threshold procedures.
 
 Important rules:
-- Compare every engineering parameter in the analytics JSON against the
-  thresholds, safe operating limits, risk matrix, decision trees, inspection
-  procedures, failure modes, and maintenance actions defined in the manual.
-- Use only thresholds and maintenance procedures found in the attached manual.
-- Do not invent thresholds, limits, failure modes, or maintenance actions.
-- If a required threshold or procedure is unavailable in the manual, state that
-  explicitly in the JSON output.
+- Compare every engineering parameter in the analytics JSON against standard safe operating limits, risk matrix, decision trees, inspection procedures, failure modes, and maintenance actions.
+- Do not invent thresholds, limits, failure modes, or maintenance actions without engineering justification.
 - Prioritize maintenance actions when multiple actions apply.
 - Determine whether the aircraft status is one of:
   SAFE, MONITOR, MAINTENANCE REQUIRED, GROUND AIRCRAFT.
@@ -174,10 +176,16 @@ Return exactly one JSON object with this schema:
 """.strip()
 
     def analyze(self, engineering_analytics: dict[str, Any]) -> dict[str, Any]:
-        """Generate a structured AI maintenance report from analytics and PDF."""
+        """Generate a structured AI maintenance report from analytics."""
         prompt = self.build_prompt(engineering_analytics)
-        manual_bytes = self.load_manual()
 
+        if self.use_gemini_bypass:
+            logger.info("Using Google Gemini API bypass to analyze aircraft maintenance data...")
+            response_text = self._call_gemini_api(prompt)
+            return self._parse_json_response(response_text)
+
+        # Default AWS Bedrock Route
+        manual_bytes = self.load_manual()
         conversation = [
             {
                 "role": "user",
@@ -213,6 +221,38 @@ Return exactly one JSON object with this schema:
         response_text = self._extract_response_text(response)
         return self._parse_json_response(response_text)
 
+    def _call_gemini_api(self, prompt_text: str) -> str:
+        """Call Google Gemini REST API directly using standard library."""
+        api_key = GEMINI_API_KEY
+        if not api_key or api_key == "YOUR_GEMINI_API_KEY_HERE":
+            raise ValueError("GEMINI_API_KEY is not set. Please set a valid Gemini API key.")
+
+        url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){api_key}"
+        
+        payload = json.dumps({
+            "contents": [{"parts": [{"text": prompt_text}]}],
+            "generationConfig": {
+                "temperature": self.temperature,
+                "maxOutputTokens": self.max_tokens,
+                "responseMimeType": "application/json"
+            }
+        }).encode("utf-8")
+
+        headers = {"Content-Type": "application/json"}
+        req = urllib.request.Request(url, data=payload, headers=headers)
+
+        try:
+            with urllib.request.urlopen(req) as response:
+                result = json.loads(response.read().decode("utf-8"))
+                return result["candidates"][0]["content"]["parts"][0]["text"]
+        except urllib.error.HTTPError as exc:
+            err_body = exc.read().decode("utf-8")
+            logger.error("Gemini API HTTP Error %d: %s", exc.code, err_body)
+            raise RuntimeError(f"Gemini API request failed with status {exc.code}: {err_body}") from exc
+        except Exception as exc:
+            logger.exception("Gemini API request failed")
+            raise RuntimeError("Failed to obtain response from Gemini API") from exc
+
     def _document_name(self) -> str:
         """Return a Bedrock-safe document name."""
         return self.manual_pdf_path.stem.replace("_", " ").replace("-", " ")
@@ -240,211 +280,24 @@ Return exactly one JSON object with this schema:
     @staticmethod
     def _parse_json_response(response_text: str) -> dict[str, Any]:
         """Parse and validate the JSON-only model response."""
+        cleaned_text = response_text.strip()
+        
+        # Remove Markdown code block wrappers if returned by the LLM
+        if cleaned_text.startswith("```"):
+            lines = cleaned_text.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            cleaned_text = "\n".join(lines).strip()
+
         try:
-            parsed = json.loads(response_text)
+            parsed = json.loads(cleaned_text)
         except json.JSONDecodeError as exc:
             logger.error("Model returned non-JSON response: %s", response_text)
-            raise ValueError("Bedrock response was not valid JSON") from exc
+            raise ValueError("Model response was not valid JSON") from exc
 
         if not isinstance(parsed, dict):
-            raise ValueError("Bedrock response JSON must be an object")
+            raise ValueError("Model response JSON must be an object")
 
         return parsed
-
-
-if __name__ == "__main__":
-    import boto3
-
-    logging.basicConfig(level=logging.INFO)
-
-    base_dir = Path(__file__).resolve().parents[2]
-    manual_pdf_path = base_dir / "data" / "AeroTech_ATX200_Maintenance_Manual.pdf"
-
-    if not manual_pdf_path.exists():
-        raise FileNotFoundError(f"Maintenance manual not found: {manual_pdf_path}")
-
-    # Example usage:
-    # 1. Generate analytics JSON from the engineering analytics module
-    # 2. Paste that JSON into the `engineering_json` variable below
-    engineering_json = {
-  "aircraft_id": "AIR-001",
-  "latest_flight_cycle": 100,
-  "current_record": {
-    "Aircraft_ID": "AIR-001",
-    "Aircraft_Model": "A320neo",
-    "Engine_Model": "CFM LEAP-1A",
-    "Airport_Code": "DEL",
-    "Flight_Cycle": 100,
-    "Flight_Hours": 340.0,
-    "Cycles_Since_Overhaul": 100,
-    "Last_Maintenance_Date": "2026-10-28",
-    "Ambient_Temperature": 4.717116117435664,
-    "Humidity": 90,
-    "Outside_Air_Temperature": -2.5,
-    "Engine_Temperature": 720.9,
-    "Exhaust_Gas_Temperature": 685.1,
-    "Oil_Temperature": 102.1,
-    "Oil_Pressure": 47.9,
-    "Engine_Vibration": 6.08,
-    "Compressor_Pressure": 44.6,
-    "Fuel_Flow": 2456.8,
-    "Hydraulic_Pressure": 3017.9,
-    "Engine_RPM": 9796,
-    "Risk_Score": 77.2,
-    "Remaining_Useful_Life": 30
-  },
-  "historical_window_size": 10,
-  "historical_analysis": [
-    {
-      "column": "Ambient_Temperature",
-      "latest_value": 4.717,
-      "historical_average": 17.377,
-      "historical_median": 21.16,
-      "historical_std_dev": 11.17,
-      "change_from_average": -12.66,
-      "change_percent": -72.854,
-      "trend_direction": "DECREASING"
-    },
-    {
-      "column": "Humidity",
-      "latest_value": 90.0,
-      "historical_average": 57.8,
-      "historical_median": 55.0,
-      "historical_std_dev": 21.521,
-      "change_from_average": 32.2,
-      "change_percent": 55.709,
-      "trend_direction": "INCREASING"
-    },
-    {
-      "column": "Outside_Air_Temperature",
-      "latest_value": -2.5,
-      "historical_average": 11.68,
-      "historical_median": 15.85,
-      "historical_std_dev": 12.857,
-      "change_from_average": -14.18,
-      "change_percent": -121.404,
-      "trend_direction": "DECREASING"
-    },
-    {
-      "column": "Engine_Temperature",
-      "latest_value": 720.9,
-      "historical_average": 713.3,
-      "historical_median": 713.5,
-      "historical_std_dev": 2.5,
-      "change_from_average": 7.6,
-      "change_percent": 1.065,
-      "trend_direction": "STABLE"
-    },
-    {
-      "column": "Exhaust_Gas_Temperature",
-      "latest_value": 685.1,
-      "historical_average": 681.73,
-      "historical_median": 681.25,
-      "historical_std_dev": 2.297,
-      "change_from_average": 3.37,
-      "change_percent": 0.494,
-      "trend_direction": "STABLE"
-    },
-    {
-      "column": "Oil_Temperature",
-      "latest_value": 102.1,
-      "historical_average": 100.01,
-      "historical_median": 99.6,
-      "historical_std_dev": 1.49,
-      "change_from_average": 2.09,
-      "change_percent": 2.09,
-      "trend_direction": "STABLE"
-    },
-    {
-      "column": "Oil_Pressure",
-      "latest_value": 47.9,
-      "historical_average": 49.1,
-      "historical_median": 49.25,
-      "historical_std_dev": 0.438,
-      "change_from_average": -1.2,
-      "change_percent": -2.444,
-      "trend_direction": "STABLE"
-    },
-    {
-      "column": "Engine_Vibration",
-      "latest_value": 6.08,
-      "historical_average": 5.713,
-      "historical_median": 5.68,
-      "historical_std_dev": 0.157,
-      "change_from_average": 0.367,
-      "change_percent": 6.424,
-      "trend_direction": "INCREASING"
-    },
-    {
-      "column": "Compressor_Pressure",
-      "latest_value": 44.6,
-      "historical_average": 44.13,
-      "historical_median": 44.3,
-      "historical_std_dev": 0.344,
-      "change_from_average": 0.47,
-      "change_percent": 1.065,
-      "trend_direction": "STABLE"
-    },
-    {
-      "column": "Fuel_Flow",
-      "latest_value": 2456.8,
-      "historical_average": 2427.43,
-      "historical_median": 2425.85,
-      "historical_std_dev": 7.294,
-      "change_from_average": 29.37,
-      "change_percent": 1.21,
-      "trend_direction": "STABLE"
-    },
-    {
-      "column": "Hydraulic_Pressure",
-      "latest_value": 3017.9,
-      "historical_average": 3011.3,
-      "historical_median": 3018.15,
-      "historical_std_dev": 33.517,
-      "change_from_average": 6.6,
-      "change_percent": 0.219,
-      "trend_direction": "STABLE"
-    },
-    {
-      "column": "Engine_RPM",
-      "latest_value": 9796.0,
-      "historical_average": 9818.4,
-      "historical_median": 9813.0,
-      "historical_std_dev": 54.276,
-      "change_from_average": -22.4,
-      "change_percent": -0.228,
-      "trend_direction": "STABLE"
-    },
-    {
-      "column": "Risk_Score",
-      "latest_value": 77.2,
-      "historical_average": 73.43,
-      "historical_median": 73.45,
-      "historical_std_dev": 1.983,
-      "change_from_average": 3.77,
-      "change_percent": 5.134,
-      "trend_direction": "INCREASING"
-    },
-    {
-      "column": "Remaining_Useful_Life",
-      "latest_value": 30.0,
-      "historical_average": 35.5,
-      "historical_median": 35.5,
-      "historical_std_dev": 2.872,
-      "change_from_average": -5.5,
-      "change_percent": -15.493,
-      "trend_direction": "DECREASING"
-    }
-  ]
-}
-    bedrock_client = boto3.client("bedrock-runtime", region_name="us-east-1")
-    analyzer = AircraftMaintenanceAnalyzer(
-        bedrock_client=bedrock_client,
-        model_id="amazon.nova-pro-v1:0",
-        manual_pdf_path=manual_pdf_path,
-        temperature=0.2,
-        max_tokens=2000,
-    )
-
-    result = analyzer.analyze(engineering_json)
-    print(json.dumps(result, indent=2))
