@@ -1,7 +1,8 @@
-pandas
-boto3
 fastapi
 uvicorn
+pandas
 openpyxl
-python-multipart
+pypdf
 python-dotenv
+google-generativeai
+python-multipart
