@@ -29,9 +29,9 @@ class AircraftMaintenanceAnalyzer:
 
     def __init__(
         self,
-        bedrock_client: Any,
-        model_id: str,
-        manual_pdf_path: str | Path,
+        bedrock_client: Any = None,
+        model_id: str = "gemini-2.5-flash",
+        manual_pdf_path: str | Path = "data/manual.pdf",
         temperature: float = 0.2,
         max_tokens: int = 2_000,
     ) -> None:
@@ -219,7 +219,7 @@ Return exactly one JSON object with this schema:
             raise RuntimeError(f"Gemini API request failed with status {exc.code}: {err_body}") from exc
         except Exception as exc:
             logger.exception("Gemini API request failed")
-            raise RuntimeError("Failed to obtain response from Gemini API") from exc
+            raise RuntimeError(f"Failed to obtain response from Gemini API: {str(exc)}") from exc
 
         return self._parse_json_response(response_text)
 
