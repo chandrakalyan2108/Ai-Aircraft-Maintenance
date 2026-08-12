@@ -14,7 +14,6 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-import boto3
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
@@ -39,7 +38,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 
 @app.get("/")
@@ -147,27 +145,8 @@ def maintenance_prediction(payload: dict[str, Any]) -> dict[str, Any]:
         )
 
     try:
-        aws_region = os.getenv("AWS_REGION", "us-east-1")
-        aws_access_key = os.getenv("AWS_ACCESS_KEY_ID")
-        aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
-        bedrock_model_id = os.getenv("BEDROCK_MODEL_ID", "amazon.nova-pro-v1:0")
-
-        boto3_kwargs = {
-            "service_name": "bedrock-runtime",
-            "region_name": aws_region,
-        }
-        
-        # Only add explicit credentials if they are provided in .env
-        # Otherwise, boto3 will fall back to default credential providers (e.g., ~/.aws/credentials)
-        if aws_access_key and aws_access_key != "YOUR_ACCESS_KEY" and aws_secret_key and aws_secret_key != "YOUR_SECRET_KEY":
-            boto3_kwargs["aws_access_key_id"] = aws_access_key
-            boto3_kwargs["aws_secret_access_key"] = aws_secret_key
-
-        bedrock_client = boto3.client(**boto3_kwargs)
-
+        # Clean initialization using Google Gemini
         analyzer = AircraftMaintenanceAnalyzer(
-            bedrock_client=bedrock_client,
-            model_id=bedrock_model_id,
             manual_pdf_path=manual_pdf_path,
             temperature=0.2,
             max_tokens=2_000,
