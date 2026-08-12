@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Uses environment variable if available, otherwise defaults to your active backend LoadBalancer
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://a78e9e9ad373f40318e1541a81f32826-2143101633.ap-south-2.elb.amazonaws.com';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://http://a838dab0db39b4f84af0264055780a1f-1662849908.us-east-1.elb.amazonaws.com';
 
 const api = axios.create({
   baseURL: BACKEND_URL,
