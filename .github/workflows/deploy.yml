@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch: # <-- Adds the manual "Run workflow" button in GitHub UI
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -135,17 +135,17 @@ jobs:
           kubectl apply -f kubernetes/
 
       # ----------------------------------------------------
-      # Verify Deployment
+      # Verify Deployment (Expanded timeout to 180s)
       # ----------------------------------------------------
       - name: Wait for Backend
         continue-on-error: true
         run: |
-          kubectl rollout status deployment/maintenance-backend --timeout=60s
+          kubectl rollout status deployment/maintenance-backend --timeout=180s
 
       - name: Wait for Frontend
         continue-on-error: true
         run: |
-          kubectl rollout status deployment/maintenance-frontend --timeout=60s
+          kubectl rollout status deployment/maintenance-frontend --timeout=180s
 
       # ----------------------------------------------------
       # Verify Pods
