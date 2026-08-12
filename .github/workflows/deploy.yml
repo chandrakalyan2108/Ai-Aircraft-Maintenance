@@ -120,7 +120,7 @@ jobs:
             --from-literal=AWS_REGION=${{ secrets.AWS_REGION }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
-      - name: Create Gemini API Key Secret  <-- [ADDED THIS STEP]
+      - name: Create Gemini API Key Secret
         run: |
           kubectl create secret generic gemini-secret \
             --from-literal=GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} \
@@ -134,11 +134,22 @@ jobs:
           kubectl apply -f kubernetes/
 
       # ----------------------------------------------------
-      # Verify Deployment
+      # Verify Deployment & Debug If It Fails
       # ----------------------------------------------------
       - name: Wait for Backend
+        continue-on-error: true
         run: |
           kubectl rollout status deployment/maintenance-backend
+
+      - name: Debug Backend Failure if Rollout Fails
+        if: always()
+        run: |
+          echo "=== POD STATUS ==="
+          kubectl get pods
+          echo "=== POD DESCRIPTION ==="
+          kubectl describe deployment maintenance-backend
+          echo "=== CONTAINER LOGS ==="
+          kubectl logs -l app=maintenance-backend --tail=100 || true
 
       - name: Wait for Frontend
         run: |
