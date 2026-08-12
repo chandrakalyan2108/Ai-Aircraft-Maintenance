@@ -1,56 +1,45 @@
 """
-Amazon Bedrock maintenance analyzer for the Aircraft Maintenance Platform.
+Google Gemini maintenance analyzer for the Aircraft Maintenance Platform.
 
 This module sends deterministic engineering analytics plus the full internal
-maintenance manual PDF to an LLM to return a structured maintenance report.
+maintenance manual PDF directly to Google Gemini using native PDF support.
 """
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any
 import urllib.request
 import urllib.error
 
-from botocore.exceptions import BotoCoreError, ClientError
-
-
 logger = logging.getLogger(__name__)
 
-# Set your Gemini API key here or via environment variable GEMINI_API_KEY
+# Keep placeholder for security; Kubernetes will inject the real key via env var
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "YOUR_GEMINI_API_KEY_HERE")
-
-
-class BedrockRuntimeClient(Protocol):
-    """Minimal protocol for the boto3 Bedrock Runtime client."""
-
-    def converse(self, **kwargs: Any) -> dict[str, Any]:
-        """Call the Bedrock Converse API."""
 
 
 class AircraftMaintenanceAnalyzer:
     """
-    Generate AI maintenance reports using AI and a manual PDF.
+    Generate AI maintenance reports using Google Gemini and a manual PDF.
     """
 
     def __init__(
         self,
-        bedrock_client: BedrockRuntimeClient,
+        bedrock_client: Any,
         model_id: str,
         manual_pdf_path: str | Path,
         temperature: float = 0.2,
         max_tokens: int = 2_000,
-        use_gemini_bypass: bool = True,  # Set to True to bypass AWS Bedrock block
     ) -> None:
         self.bedrock_client = bedrock_client
         self.model_id = model_id
         self.manual_pdf_path = Path(manual_pdf_path)
         self.temperature = temperature
         self.max_tokens = max_tokens
-        self.use_gemini_bypass = use_gemini_bypass
 
     def load_manual(self) -> bytes:
         """Load the complete aircraft maintenance manual PDF as bytes."""
@@ -84,11 +73,16 @@ Your task is to generate a professional aircraft maintenance engineering report
 using two inputs:
 
 1. Engineering Analytics JSON provided below.
-2. Aircraft maintenance standards and threshold procedures.
+2. The attached internal Aircraft Maintenance Manual PDF.
 
 Important rules:
-- Compare every engineering parameter in the analytics JSON against standard safe operating limits, risk matrix, decision trees, inspection procedures, failure modes, and maintenance actions.
-- Do not invent thresholds, limits, failure modes, or maintenance actions without engineering justification.
+- Compare every engineering parameter in the analytics JSON against the
+  thresholds, safe operating limits, risk matrix, decision trees, inspection
+  procedures, failure modes, and maintenance actions defined in the manual.
+- Use only thresholds and maintenance procedures found in the attached manual.
+- Do not invent thresholds, limits, failure modes, or maintenance actions.
+- If a required threshold or procedure is unavailable in the manual, state that
+  explicitly in the JSON output.
 - Prioritize maintenance actions when multiple actions apply.
 - Determine whether the aircraft status is one of:
   SAFE, MONITOR, MAINTENANCE REQUIRED, GROUND AIRCRAFT.
@@ -176,61 +170,34 @@ Return exactly one JSON object with this schema:
 """.strip()
 
     def analyze(self, engineering_analytics: dict[str, Any]) -> dict[str, Any]:
-        """Generate a structured AI maintenance report from analytics."""
+        """Generate a structured AI maintenance report using Google Gemini API."""
         prompt = self.build_prompt(engineering_analytics)
-
-        if self.use_gemini_bypass:
-            logger.info("Using Google Gemini API bypass to analyze aircraft maintenance data...")
-            response_text = self._call_gemini_api(prompt)
-            return self._parse_json_response(response_text)
-
-        # Default AWS Bedrock Route
         manual_bytes = self.load_manual()
-        conversation = [
-            {
-                "role": "user",
-                "content": [
-                    {"text": prompt},
-                    {
-                        "document": {
-                            "format": "pdf",
-                            "name": self._document_name(),
-                            "source": {"bytes": manual_bytes},
-                        }
-                    },
-                ],
-            }
-        ]
+        pdf_base64 = base64.b64encode(manual_bytes).decode("utf-8")
 
-        try:
-            logger.info("Invoking Bedrock model: %s", self.model_id)
-            response = self.bedrock_client.converse(
-                modelId=self.model_id,
-                messages=conversation,
-                inferenceConfig={
-                    "maxTokens": self.max_tokens,
-                    "temperature": self.temperature,
-                },
-            )
-        except (ClientError, BotoCoreError) as exc:
-            logger.exception("Bedrock invocation failed")
-            raise RuntimeError(
-                f"Unable to invoke Bedrock model '{self.model_id}'"
-            ) from exc
-
-        response_text = self._extract_response_text(response)
-        return self._parse_json_response(response_text)
-
-    def _call_gemini_api(self, prompt_text: str) -> str:
-        """Call Google Gemini REST API directly using standard library."""
         api_key = GEMINI_API_KEY
         if not api_key or api_key == "YOUR_GEMINI_API_KEY_HERE":
-            raise ValueError("GEMINI_API_KEY is not set. Please set a valid Gemini API key.")
+            api_key = os.getenv("GEMINI_API_KEY", "")
 
-        url = f"[https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=](https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=){api_key}"
-        
+        if not api_key:
+            raise ValueError("GEMINI_API_KEY is not set.")
+
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+
         payload = json.dumps({
-            "contents": [{"parts": [{"text": prompt_text}]}],
+            "contents": [
+                {
+                    "parts": [
+                        {"text": prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": "application/pdf",
+                                "data": pdf_base64
+                            }
+                        }
+                    ]
+                }
+            ],
             "generationConfig": {
                 "temperature": self.temperature,
                 "maxOutputTokens": self.max_tokens,
@@ -242,9 +209,10 @@ Return exactly one JSON object with this schema:
         req = urllib.request.Request(url, data=payload, headers=headers)
 
         try:
+            logger.info("Invoking Google Gemini API with native PDF manual...")
             with urllib.request.urlopen(req) as response:
                 result = json.loads(response.read().decode("utf-8"))
-                return result["candidates"][0]["content"]["parts"][0]["text"]
+                response_text = result["candidates"][0]["content"]["parts"][0]["text"]
         except urllib.error.HTTPError as exc:
             err_body = exc.read().decode("utf-8")
             logger.error("Gemini API HTTP Error %d: %s", exc.code, err_body)
@@ -253,36 +221,13 @@ Return exactly one JSON object with this schema:
             logger.exception("Gemini API request failed")
             raise RuntimeError("Failed to obtain response from Gemini API") from exc
 
-    def _document_name(self) -> str:
-        """Return a Bedrock-safe document name."""
-        return self.manual_pdf_path.stem.replace("_", " ").replace("-", " ")
-
-    @staticmethod
-    def _extract_response_text(response: dict[str, Any]) -> str:
-        """Extract text from a Bedrock Converse response."""
-        try:
-            content = response["output"]["message"]["content"]
-        except KeyError as exc:
-            raise ValueError("Bedrock response did not contain message content") from exc
-
-        text_parts = [
-            block["text"]
-            for block in content
-            if isinstance(block, dict) and "text" in block
-        ]
-        response_text = "\n".join(text_parts).strip()
-
-        if not response_text:
-            raise ValueError("Bedrock returned an empty response")
-
-        return response_text
+        return self._parse_json_response(response_text)
 
     @staticmethod
     def _parse_json_response(response_text: str) -> dict[str, Any]:
         """Parse and validate the JSON-only model response."""
         cleaned_text = response_text.strip()
         
-        # Remove Markdown code block wrappers if returned by the LLM
         if cleaned_text.startswith("```"):
             lines = cleaned_text.splitlines()
             if lines[0].startswith("```"):
