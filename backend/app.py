@@ -16,7 +16,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+def get_client():
+    api_key = os.environ.get("GEMINI_API_KEY")
+    return genai.Client(api_key=api_key) if api_key else genai.Client()
 
 @app.get("/")
 async def root():
@@ -33,6 +35,7 @@ async def health_check():
 @app.post("/aircraft/analytics")
 async def get_aircraft_analytics(file: UploadFile = File(...)):
     try:
+        client = get_client()
         file_bytes = await file.read()
         filename = file.filename.lower()
         
