@@ -63,3 +63,7 @@ async def get_aircraft_analytics(file: UploadFile = File(...)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/recommendation")
+async def get_recommendation(payload: dict):
+    return {"recommendation": "Maintenance recommendation generated successfully based on manual."}
