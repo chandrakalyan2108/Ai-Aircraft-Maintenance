@@ -20,7 +20,7 @@ export const getMaintenanceRecommendation = async (payload) => {
 };
 
 export const uploadAnalyticsFile = async (formData) => {
-  const response = await apiClient.post('/upload', formData, {
+  const response = await apiClient.post('/aircraft/analytics', formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
     },
