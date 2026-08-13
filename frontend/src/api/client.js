@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://a78e9e9ad373f40318e1541a81f32826-2143101633.ap-south-2.elb.amazonaws.com';
+const BACKEND_URL = 'http://a78e9e9ad373f40318e1541a81f32826-2143101633.ap-south-2.elb.amazonaws.com';
 
 const apiClient = axios.create({
   baseURL: BACKEND_URL,
