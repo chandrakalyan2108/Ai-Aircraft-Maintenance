@@ -1,7 +1,7 @@
 import os
 import io
 import pandas as pd
-from fastapi import FastAPI, File, UploadFile, HTTPException
+from fastapi import FastAPI, UploadFile, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from google import genai
 from google.genai import types
@@ -33,12 +33,22 @@ async def health_check():
     return {"status": "healthy", "message": "Backend is up and running!"}
 
 @app.post("/aircraft/analytics")
-async def get_aircraft_analytics(file: UploadFile = File(...)):
+async def get_aircraft_analytics(request: Request):
     try:
+        form = await request.form()
+        file = None
+        for key, value in form.items():
+            if isinstance(value, UploadFile):
+                file = value
+                break
+        
+        if not file:
+            raise HTTPException(status_code=400, detail="No file found in the request form data.")
+
         client = get_client()
         file_bytes = await file.read()
         filename = file.filename.lower()
-        
+
         if filename.endswith(('.xlsx', '.xls')):
             df = pd.read_excel(io.BytesIO(file_bytes))
             text_data = df.to_string(index=False)
@@ -55,14 +65,14 @@ async def get_aircraft_analytics(file: UploadFile = File(...)):
                 ]
             )
         else:
-            raise HTTPException(status_code=400, detail="Unsupported file format. Please upload an Excel or PDF file.")
-        
+            raise HTTPException(status_code=400, detail="Unsupported file format.")
+
         return {
             "status": "success",
             "analytics": response.text
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/recommendation")
 async def get_recommendation(payload: dict):
