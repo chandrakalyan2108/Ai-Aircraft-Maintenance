@@ -1,6 +1,5 @@
 import axios from 'axios';
 
-// Uses environment variable if available, otherwise defaults to your active backend LoadBalancer
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://a78e9e9ad373f40318e1541a81f32826-2143101633.ap-south-2.elb.amazonaws.com';
 
 const apiClient = axios.create({
@@ -10,25 +9,16 @@ const apiClient = axios.create({
   },
 });
 
-/**
- * Checks backend health status.
- */
 export const healthCheck = async () => {
   const response = await apiClient.get('/health');
   return response.data;
 };
 
-/**
- * Fetches maintenance recommendations.
- */
 export const getMaintenanceRecommendation = async (payload) => {
   const response = await apiClient.post('/recommendation', payload);
   return response.data;
 };
 
-/**
- * Uploads analytics or maintenance files.
- */
 export const uploadAnalyticsFile = async (formData) => {
   const response = await apiClient.post('/upload', formData, {
     headers: {
