@@ -20,6 +20,7 @@ function App() {
       } catch (err) {
         setStatus('Backend offline. Start FastAPI on port 8000.');
         setError(err.message);
+      console.log('DEBUG error response:', err.response?.data, err.response?.status);
       }
     };
 
@@ -39,11 +40,15 @@ function App() {
     setRecommendation(null);
 
     try {
-      const response = await uploadAnalyticsFile(excelFile);
+      const formData = new FormData();
+      formData.append('file', excelFile);
+      console.log('DEBUG excelFile:', excelFile, 'DEBUG formData file:', formData.get('file'));
+      const response = await uploadAnalyticsFile(formData);
       setAnalyticsResult(response);
       setStatus(`Analytics ready for ${response.aircraft_id || 'selected aircraft'}`);
     } catch (err) {
       setError(err.message);
+      console.log('DEBUG error response:', err.response?.data, err.response?.status);
     } finally {
       setIsLoading(false);
       setLoadingPhase('');
@@ -61,11 +66,17 @@ function App() {
     setError('');
 
     try {
-      const response = await getMaintenanceRecommendation(analyticsResult);
+      const formData = new FormData();
+      formData.append('analytics', analyticsResult.analytics);
+      if (manualFile) {
+        formData.append('file', manualFile);
+      }
+      const response = await getMaintenanceRecommendation(formData);
       setRecommendation(response);
       setStatus('AI maintenance recommendation generated');
     } catch (err) {
       setError(err.message);
+      console.log('DEBUG error response:', err.response?.data, err.response?.status);
     } finally {
       setIsLoading(false);
       setLoadingPhase('');
@@ -89,7 +100,7 @@ function App() {
       {
         icon: '✈',
         label: 'Aircraft',
-        value: analyticsResult.aircraft_id || 'N/A',
+        value: analyticsResult?.aircraft_id || 'N/A',
         sub: record.Aircraft_Model || 'Unknown model',
         accent: 'cyan',
       },
@@ -103,7 +114,7 @@ function App() {
       {
         icon: '🔄',
         label: 'Flight Cycle',
-        value: summary.latest_flight_cycle || 'N/A',
+        value: summary?.latest_flight_cycle || 'N/A',
         sub: `${record.Flight_Hours || 0} flight hours logged`,
         accent: 'sky',
       },
@@ -139,7 +150,7 @@ function App() {
         icon: '📊',
         label: 'Signals',
         value: historicalAnalysis.length,
-        sub: `Window: ${analyticsResult.summary.historical_window_size || 10} cycles`,
+        sub: `Window: ${analyticsResult?.summary?.historical_window_size || 10} cycles`,
         accent: 'violet',
       },
       {
@@ -282,7 +293,7 @@ function App() {
       <section className="flight-track-card">
         <div className="track-copy">
           <p className="eyebrow">Live flight monitoring</p>
-          <h3>{analyticsResult ? `Flight ${analyticsResult.aircraft_id} has landed and is being assessed.` : 'A landed flight is ready for assessment.'}</h3>
+          <h3>{analyticsResult ? `Flight ${analyticsResult?.aircraft_id} has landed and is being assessed.` : 'A landed flight is ready for assessment.'}</h3>
           <p>The telemetry loop is visualized here so the transition from landing to maintenance review feels immediate and operational.</p>
         </div>
         <div className="track-visual" aria-hidden="true">
@@ -397,6 +408,18 @@ function App() {
           </div>
 
           {error ? <div className="error-box">⚠ {error}</div> : null}
+          {analyticsResult ? (
+            <div className="real-report-panel" style={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: '8px', padding: '20px', margin: '16px 0', color: '#e0e0e0', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+              <h3 style={{ marginTop: 0, color: '#4fd1c5' }}>📋 Full AI Analysis Report</h3>
+              <div>{analyticsResult.analytics}</div>
+            </div>
+          ) : null}
+          {recommendation ? (
+            <div className="real-recommendation-panel" style={{ background: '#1a2e1a', border: '1px solid #333', borderRadius: '8px', padding: '20px', margin: '16px 0', color: '#e0e0e0', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+              <h3 style={{ marginTop: 0, color: '#68d391' }}>✨ AI Maintenance Recommendation</h3>
+              <div>{recommendation.recommendation}</div>
+            </div>
+          ) : null}
 
           <div className="split-view">
             {/* ─── Engineering Analytics ─── */}
@@ -412,11 +435,11 @@ function App() {
                   <div className="aircraft-header">
                     <div className="aircraft-avatar">✈</div>
                     <div className="aircraft-info">
-                      <h4>{analyticsResult.aircraft_id} — {currentRecord?.Aircraft_Model || 'Unknown'}</h4>
+                      <h4>{analyticsResult?.aircraft_id} — {currentRecord?.Aircraft_Model || 'Unknown'}</h4>
                       <div className="aircraft-meta">
                         <span>🔧 {currentRecord?.Engine_Model || 'N/A'}</span>
                         <span>📍 {currentRecord?.Airport_Code || 'N/A'}</span>
-                        <span>🔄 Cycle {analyticsResult.summary.latest_flight_cycle}</span>
+                        <span>🔄 Cycle {analyticsResult?.summary?.latest_flight_cycle}</span>
                       </div>
                     </div>
                   </div>
