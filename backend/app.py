@@ -119,7 +119,7 @@ def build_summary(df: pd.DataFrame):
 async def root():
     return {"status": "alive"}
 
-@app.get("/health")
+@app.get("/api/health")
 async def health():
     return {"status": "healthy"}
 
@@ -134,7 +134,7 @@ async def _extract_upload_file(request: Request):
             return value
     return None
 
-@app.post("/aircraft/analytics")
+@app.post("/api/aircraft/analytics")
 async def get_aircraft_analytics(request: Request):
     try:
         file = await _extract_upload_file(request)
@@ -180,7 +180,7 @@ async def get_aircraft_analytics(request: Request):
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
-@app.post("/recommendation")
+@app.post("/api/recommendation")
 async def get_recommendation(request: Request):
     try:
         form = await request.form()
