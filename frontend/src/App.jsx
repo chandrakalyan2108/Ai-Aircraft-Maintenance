@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { getMaintenanceRecommendation, healthCheck, uploadAnalyticsFile } from './api/client';
 import PanelCard from './components/PanelCard';
 
@@ -409,15 +412,99 @@ function App() {
 
           {error ? <div className="error-box">⚠ {error}</div> : null}
           {analyticsResult ? (
-            <div className="real-report-panel" style={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: '8px', padding: '20px', margin: '16px 0', color: '#e0e0e0', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+            <div className="real-report-panel" style={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: '8px', padding: '20px', margin: '16px 0', color: '#e0e0e0', lineHeight: '1.6' }}>
               <h3 style={{ marginTop: 0, color: '#4fd1c5' }}>📋 Full AI Analysis Report</h3>
-              <div>{analyticsResult.analytics}</div>
+              <div className="markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{analyticsResult.analytics}</ReactMarkdown></div>
             </div>
           ) : null}
           {recommendation ? (
-            <div className="real-recommendation-panel" style={{ background: '#1a2e1a', border: '1px solid #333', borderRadius: '8px', padding: '20px', margin: '16px 0', color: '#e0e0e0', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
-              <h3 style={{ marginTop: 0, color: '#68d391' }}>✨ AI Maintenance Recommendation</h3>
-              <div>{recommendation.recommendation}</div>
+            <div className="real-recommendation-panel" style={{ background: '#141428', border: '1px solid #333', borderRadius: '8px', padding: '20px', margin: '16px 0', color: '#e0e0e0' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                <span style={{ fontSize: '1.4rem' }}>🧠</span>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '0.85rem', letterSpacing: '0.04em' }}>AI ANALYSIS</div>
+                  <div style={{ color: '#9aa0b0', fontSize: '0.8rem' }}>{recommendation.aircraft_id} · {recommendation.aircraft_model}</div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '16px' }}>
+                {(recommendation.status_badges || []).map((badge, i) => (
+                  <span key={i} style={{ background: '#3a2a10', color: '#f0b429', border: '1px solid #5a4420', borderRadius: '999px', padding: '4px 12px', fontSize: '0.75rem', fontWeight: 600 }}>● {badge}</span>
+                ))}
+              </div>
+              {recommendation.summary_quote ? (
+                <blockquote style={{ borderLeft: '3px solid #4fd1c5', margin: '0 0 16px 0', padding: '8px 16px', color: '#cbd5e0', fontStyle: 'italic', background: '#0f0f20' }}>{recommendation.summary_quote}</blockquote>
+              ) : null}
+              {recommendation.alert_title ? (
+                <div style={{ background: recommendation.ground_aircraft ? '#3a1414' : '#143a1e', border: `1px solid ${recommendation.ground_aircraft ? '#6b2020' : '#206b30'}`, borderRadius: '8px', padding: '16px', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, marginBottom: '4px' }}>
+                    <span>{recommendation.ground_aircraft ? '🚫' : '✅'}</span>
+                    <span>{recommendation.alert_title}</span>
+                  </div>
+                  <div style={{ color: '#aaa', fontSize: '0.85rem', marginBottom: '10px' }}>{recommendation.alert_subtitle}</div>
+                  {recommendation.alert_message ? (
+                    <div style={{ borderLeft: '3px solid #4fd1c5', paddingLeft: '12px', marginBottom: '10px' }}>{recommendation.alert_message}</div>
+                  ) : null}
+                  {recommendation.alert_note ? (
+                    <div style={{ color: '#f0b429', fontSize: '0.8rem', fontStyle: 'italic' }}>💡 {recommendation.alert_note}</div>
+                  ) : null}
+                </div>
+              ) : null}
+              {recommendation.violations && recommendation.violations.length > 0 ? (
+                <div>
+                  <div style={{ fontWeight: 700, marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px' }}>⚠ Threshold Violations</div>
+                  {recommendation.violations.map((v, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #2a2a3e', padding: '10px 0' }}>
+                      <div>
+                        <div style={{ color: '#f56565', fontWeight: 600 }}>{v.parameter}</div>
+                        <div style={{ color: '#777', fontSize: '0.7rem', textTransform: 'uppercase' }}>Observed</div>
+                        <div style={{ fontWeight: 700 }}>{v.observed}</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ color: '#777', fontSize: '0.7rem', textTransform: 'uppercase' }}>Threshold</div>
+                        <div>{v.threshold}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              {recommendation.root_cause_analysis ? (
+                <div style={{ marginTop: '20px' }}>
+                  <div style={{ fontWeight: 700, marginBottom: '8px' }}>🔍 Root Cause Analysis</div>
+                  <div style={{ color: '#cbd5e0', fontSize: '0.9rem', lineHeight: '1.6' }}>{recommendation.root_cause_analysis}</div>
+                </div>
+              ) : null}
+              {recommendation.maintenance_actions && recommendation.maintenance_actions.length > 0 ? (
+                <div style={{ marginTop: '20px' }}>
+                  <div style={{ fontWeight: 700, marginBottom: '8px' }}>🛠 Maintenance Actions</div>
+                  <ol style={{ margin: 0, paddingLeft: '20px', color: '#cbd5e0', fontSize: '0.9rem', lineHeight: '1.8' }}>
+                    {recommendation.maintenance_actions.map((a, i) => (<li key={i}>{a}</li>))}
+                  </ol>
+                </div>
+              ) : null}
+              {recommendation.inspection_checklist && recommendation.inspection_checklist.length > 0 ? (
+                <div style={{ marginTop: '20px' }}>
+                  <div style={{ fontWeight: 700, marginBottom: '8px' }}>✅ Inspection Checklist</div>
+                  <ul style={{ margin: 0, paddingLeft: '20px', color: '#cbd5e0', fontSize: '0.9rem', lineHeight: '1.8' }}>
+                    {recommendation.inspection_checklist.map((c, i) => (<li key={i}>{c}</li>))}
+                  </ul>
+                </div>
+              ) : null}
+              {recommendation.ambient_conditions ? (
+                <div style={{ marginTop: '20px' }}>
+                  <div style={{ fontWeight: 700, marginBottom: '8px' }}>🌡 Ambient Conditions</div>
+                  <div style={{ color: '#cbd5e0', fontSize: '0.9rem', lineHeight: '1.6' }}>{recommendation.ambient_conditions}</div>
+                </div>
+              ) : null}
+              {recommendation.work_order ? (
+                <div style={{ marginTop: '20px', background: '#0f0f20', border: '1px solid #333', borderRadius: '8px', padding: '16px' }}>
+                  <div style={{ fontWeight: 700, marginBottom: '8px' }}>📋 Work Order</div>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                    <span style={{ background: '#22304a', color: '#63b3ed', borderRadius: '6px', padding: '3px 10px', fontSize: '0.75rem', fontWeight: 600 }}>{recommendation.work_order.type}</span>
+                    <span style={{ background: recommendation.work_order.priority === 'IMMEDIATE' ? '#3a1414' : '#3a2a10', color: recommendation.work_order.priority === 'IMMEDIATE' ? '#fc8181' : '#f0b429', borderRadius: '6px', padding: '3px 10px', fontSize: '0.75rem', fontWeight: 600 }}>{recommendation.work_order.priority}</span>
+                  </div>
+                  <div style={{ color: '#cbd5e0', fontSize: '0.9rem' }}>{recommendation.work_order.description}</div>
+                </div>
+              ) : null}
             </div>
           ) : null}
 
@@ -464,6 +551,28 @@ function App() {
                     })}
                   </div>
 
+                  {/* Signal Trends Chart */}
+                  <div className="signal-chart" style={{ width: '100%', height: 280, margin: '16px 0' }}>
+                    <ResponsiveContainer>
+                      <BarChart data={historicalAnalysis} margin={{ top: 10, right: 10, left: 0, bottom: 60 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                        <XAxis dataKey="column" tick={{ fill: '#aaa', fontSize: 11 }} angle={-40} textAnchor="end" interval={0} />
+                        <YAxis tick={{ fill: '#aaa', fontSize: 11 }} />
+                        <Tooltip contentStyle={{ background: '#1a1a2e', border: '1px solid #444', color: '#fff' }} />
+                        <Bar dataKey="latest_value" radius={[4, 4, 0, 0]}>
+                          {historicalAnalysis.map((item, index) => (
+                            <Cell
+                              key={index}
+                              fill={
+                                item.trend_direction === 'INCREASING' ? '#f56565' :
+                                item.trend_direction === 'DECREASING' ? '#48bb78' : '#4fd1c5'
+                              }
+                            />
+                          ))}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
                   {/* Signal Trends */}
                   <div className="signal-list">
                     <h4>
