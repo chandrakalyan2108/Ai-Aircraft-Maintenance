@@ -123,8 +123,8 @@ jobs:
 
       - name: Create Gemini API Key Secret
         run: |
-          kubectl create secret generic gemini-secret \
-            --from-literal=GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} \
+          kubectl create secret generic gemini-api-key \
+            --from-literal=GOOGLE_API_KEY=${{ secrets.GEMINI_API_KEY }} \
             --dry-run=client -o yaml | kubectl apply -f -
 
       # ----------------------------------------------------
